@@ -64,7 +64,7 @@ if app_mode == "Documentation Generator":
 elif app_mode == "General Chatbot":
     
     st.header("General Chatbot 🤖")
-    st.subheader("Ask me anything! (e.g., 'Tell me a story' or 'What is 12 * 5?').")
+    st.subheader("Ask me anything!")
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
