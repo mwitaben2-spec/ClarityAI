@@ -37,7 +37,7 @@ if app_mode == "Documentation Generator":
             with st.spinner("Analyzing code..."):
                 try:
                     response = requests.post(
-                        "http://localhost:8000/generate-docs",
+                        "https://clarityai-tnq0.onrender.com/generate-docs", # <-- CHANGED: Replaced localhost with your Render URL
                         json={"code": content}
                     )
                     if response.status_code == 200:
@@ -76,7 +76,7 @@ elif app_mode == "General Chatbot":
     def get_chat_stream(prompt):
         try:
             with requests.post(
-                "http://localhost:8000/chat",
+                "https://clarityai-tnq0.onrender.com/chat", # <-- CHANGED: Replaced localhost with your Render URL
                 json={"message": prompt},
                 stream=True
             ) as response:
