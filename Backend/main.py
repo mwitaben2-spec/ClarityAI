@@ -1,10 +1,10 @@
 # -----------------------------------------------------------
-# FILENAME: backend/main.py (WITH CHAT HISTORY)
+# FILENAME: backend/main.py (WITH HEALTH CHECK)
 # -----------------------------------------------------------
 import os
 import asyncio
 import io
-import json  # <-- 1. IMPORT JSON
+import json
 from fastapi import FastAPI, Form, File, UploadFile
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -40,6 +40,14 @@ app.add_middleware(
 # --- Pydantic Models (Only for /generate-docs) ---
 class DocCodeInput(BaseModel):
     code: str
+
+# --- 1. THIS IS THE NEW HEALTH CHECK ENDPOINT ---
+@app.get("/")
+def health_check():
+    """A simple endpoint to confirm the server is running."""
+    return {"status": "ok", "message": "ClarityAI Backend is running."}
+# --- END OF NEW CODE ---
+
 
 # --- Helper Generator for Streaming (Unchanged, for /generate-docs) ---
 async def stream_gemini_response(model, prompt):
