@@ -1,5 +1,5 @@
 # -----------------------------------------------------------
-# FILENAME: backend/main.py (WITH HEALTH CHECK)
+# FILENAME: backend/main.py (FINAL FIX)
 # -----------------------------------------------------------
 import os
 import asyncio
@@ -49,7 +49,7 @@ def health_check():
 # --- END OF NEW CODE ---
 
 
-# --- Helper Generator for Streaming (Unchanged, for /generate-docs) ---
+# --- Helper Generator for Streaming (UPDATED WITH FIX) ---
 async def stream_gemini_response(model, prompt):
     """
     A generator function that yields chunks of text from the Gemini API.
@@ -63,12 +63,17 @@ async def stream_gemini_response(model, prompt):
         
         async for chunk in response_stream:
             try:
+                # --- THIS IS THE FIX ---
+                # We wrap this in a try/except to catch the
+                # "Invalid operation" error on empty final chunks.
                 if chunk.text:
                     yield chunk.text
-                    await asyncio.sleep(0.01) 
-            except ValueError:
-                print("Skipped a chunk due to safety settings or empty response.")
+                    await asyncio.sleep(0.01)
+            except Exception as e:
+                # Silently ignore the error and continue
+                print(f"Skipped a chunk: {e}")
                 pass
+            # --- END OF FIX ---
                 
     except Exception as e:
         print(f"Error during Google API stream: {e}")
@@ -106,7 +111,7 @@ async def generate_docs_streaming(code_input: DocCodeInput): # Changed to async
 @app.post("/chat")
 async def handle_chat_stream(
     message: str = Form(...),
-    history: str = Form("[]"),  # <-- 2. NEW HISTORY FIELD
+    history: str = Form("[]"), 
     file: UploadFile = File(None)
 ):
     print(f"Received STREAMING chat message (Google 2.5 Flash)...")
@@ -170,7 +175,7 @@ async def handle_chat_stream(
     # Start the chat session *with* the converted history
     chat_session = model.start_chat(history=converted_history)
     
-    # --- 6. CREATE A NEW STREAMING GENERATOR FOR THE SESSION ---
+    # --- 6. CREATE A NEW STREAMING GENERATOR FOR THE SESSION (UPDATED WITH FIX) ---
     async def chat_stream_generator():
         try:
             # Send the new prompt (with file) to the ongoing session
@@ -179,13 +184,21 @@ async def handle_chat_stream(
                 stream=True
             )
             async for chunk in response_stream:
-                if chunk.text:
-                    yield chunk.text
-                    await asyncio.sleep(0.01)
+                try:
+                    # --- THIS IS THE FIX ---
+                    # We wrap this in a try/except to catch the
+                    # "Invalid operation" error on empty final chunks.
+                    if chunk.text:
+                        yield chunk.text
+                        await asyncio.sleep(0.01)
+                except Exception as e:
+                    # Silently ignore the error and continue
+                    print(f"Skipped a chunk: {e}")
+                    pass
+                # --- END OF FIX ---
         except Exception as e:
             print(f"Error during chat stream: {e}")
             yield f"Error: {e}"
 
     # --- 7. RETURN THE NEW GENERATOR ---
-    # We no longer use stream_gemini_response here
     return StreamingResponse(chat_stream_generator(), media_type="text/plain")
