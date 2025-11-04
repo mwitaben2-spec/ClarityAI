@@ -1,5 +1,7 @@
 fastapi
-uvicorn
-python-dotenv
+uvicorn[standard]
 google-generativeai
-fastapi-cors
+python-dotenv
+pypdf
+Pillow
+python-multipart==0.0.9

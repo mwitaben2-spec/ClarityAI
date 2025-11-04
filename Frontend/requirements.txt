@@ -1,3 +1,4 @@
 streamlit
 requests
-st-copy
+st-copy-button
+streamlit-local-storage
