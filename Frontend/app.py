@@ -1,11 +1,12 @@
 # -----------------------------------------------------------
-# FILENAME: frontend/app.py (FINAL - READY FOR GIT PUSH)
+# FILENAME: frontend/app.py (FINAL - SMART TITLES & GIT READY)
 # -----------------------------------------------------------
 import streamlit as st
 import requests
 import base64
 import uuid
 import json
+import string
 from datetime import datetime, timedelta 
 from st_copy_button import st_copy_button 
 from streamlit_local_storage import LocalStorage
@@ -55,14 +56,34 @@ def save_app_data(data):
     storage.setItem("app_data", data)
 
 def generate_smart_title(prompt_text):
-    """Generates a cleaner, shorter title from the prompt."""
-    first_line = prompt_text.strip().split('\n')[0]
-    words = first_line.split()
-    if len(words) > 5:
-        return " ".join(words[:5]) + "..."
-    if len(first_line) > 35:
-        return first_line[:35] + "..."
-    return first_line
+    """
+    Generates a title based on the 'Topic' rather than just the first sentence.
+    It removes common 'filler' words to find the meat of the discussion.
+    """
+    # 1. Define filler words to ignore
+    STOPWORDS = {
+        "can", "you", "help", "me", "write", "a", "an", "the", "is", "of", "for", 
+        "in", "to", "please", "give", "create", "make", "how", "do", "i", "what", 
+        "are", "why", "with", "code", "explain", "show"
+    }
+    
+    # 2. Clean punctuation and split
+    # This removes special characters so "Python?" becomes "Python"
+    clean_text = "".join([c if c.isalnum() or c.isspace() else " " for c in prompt_text])
+    words = clean_text.split()
+    
+    # 3. Filter out stopwords to find keywords
+    keywords = [w for w in words if w.lower() not in STOPWORDS]
+    
+    # 4. Generate Title
+    if keywords:
+        # If we found keywords, use the first 3-4 of them (e.g., "Python Scraper Script")
+        title = " ".join(keywords[:4]).title()
+    else:
+        # If the user just typed stopwords (e.g., "How do I do this?"), use the raw text
+        title = " ".join(words[:5])
+        
+    return title + "..."
 
 # --- Load State ---
 if "app_data" not in st.session_state:
@@ -72,7 +93,6 @@ if "app_data" not in st.session_state:
 with st.sidebar:
     st.title("Navigation")
     
-    # Visual indicator for connection mode
     if USE_LOCAL_BACKEND:
         st.caption("🟢 Mode: Local Host")
     else:
@@ -101,11 +121,8 @@ with st.sidebar:
     
     all_chats = []
     for c_id, chat_data in st.session_state.app_data["chats"].items():
-        # Filter out empty new chats
         if chat_data["title"] == "New Chat" and not chat_data["messages"]:
             continue
-            
-        # Handle timestamp (fallback for old chats)
         ts_str = chat_data.get("created_at", datetime.now().isoformat())
         try:
             ts_dt = datetime.fromisoformat(ts_str)
@@ -118,10 +135,8 @@ with st.sidebar:
             "dt": ts_dt
         })
 
-    # Sort newest first
     all_chats.sort(key=lambda x: x["dt"], reverse=True)
 
-    # Group by date
     groups = {"Today": [], "Yesterday": [], "Previous 7 Days": [], "Older": []}
     now = datetime.now()
     today = now.date()
@@ -139,7 +154,6 @@ with st.sidebar:
         else:
             groups["Older"].append(chat)
 
-    # Render groups
     def draw_group(group_name, chats_list):
         if chats_list:
             st.markdown(f"**{group_name}**")
@@ -288,10 +302,18 @@ elif app_mode == "General Chatbot":
 
     if prompt := st.chat_input("What is up?"):
         
-        is_first_message = len(current_chat["messages"]) == 0
+        # Logic to determine if we should rename the chat
+        # 1. If it's the very first message
+        # 2. OR if it's the second message (index 2 in list) AND the current title is short/boring
+        messages_len = len(current_chat["messages"])
+        is_first_message = messages_len == 0
+        is_second_message = messages_len == 2 # [User, AI] -> New User Msg
         
-        if is_first_message:
+        should_rename = is_first_message or (is_second_message and len(current_chat["title"]) < 15)
+
+        if should_rename:
             current_chat["title"] = generate_smart_title(prompt)
+            # Ensure timestamp exists
             if "created_at" not in current_chat:
                 current_chat["created_at"] = datetime.now().isoformat()
         
@@ -309,5 +331,6 @@ elif app_mode == "General Chatbot":
         
         save_app_data(st.session_state.app_data)
         
-        if is_first_message:
+        # Refresh sidebar immediately if we renamed
+        if should_rename:
             st.rerun()
