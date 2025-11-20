@@ -1,14 +1,33 @@
 # -----------------------------------------------------------
-# FILENAME: frontend/app.py (FINAL - WITH SMART HISTORY)
+# FILENAME: frontend/app.py (FINAL - READY FOR GIT PUSH)
 # -----------------------------------------------------------
 import streamlit as st
 import requests
 import base64
 import uuid
 import json
-from datetime import datetime, timedelta # <-- ADDED FOR TIME GROUPING
+from datetime import datetime, timedelta 
 from st_copy_button import st_copy_button 
 from streamlit_local_storage import LocalStorage
+
+# ==========================================
+# ⚙️ CONFIGURATION: CONNECTION SETTINGS
+# ==========================================
+
+# 🔴 IMPORTANT: Set to FALSE for the Live Website
+USE_LOCAL_BACKEND = False
+
+if USE_LOCAL_BACKEND:
+    API_BASE_URL = "http://127.0.0.1:8000"
+else:
+    API_BASE_URL = "https://clarityai-tnq0.onrender.com"
+
+# Headers to mimic a real browser and avoid 403 errors
+REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
+
+# ==========================================
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -37,9 +56,7 @@ def save_app_data(data):
 
 def generate_smart_title(prompt_text):
     """Generates a cleaner, shorter title from the prompt."""
-    # Take only the first line and strip whitespace
     first_line = prompt_text.strip().split('\n')[0]
-    # Limit to 5 words or 35 characters to keep sidebar clean
     words = first_line.split()
     if len(words) > 5:
         return " ".join(words[:5]) + "..."
@@ -54,6 +71,13 @@ if "app_data" not in st.session_state:
 # --- Sidebar for Navigation AND File Uploads ---
 with st.sidebar:
     st.title("Navigation")
+    
+    # Visual indicator for connection mode
+    if USE_LOCAL_BACKEND:
+        st.caption("🟢 Mode: Local Host")
+    else:
+        st.caption("☁️ Mode: Live Server")
+
     app_mode = st.selectbox("Choose your mode:", 
                             ["General Chatbot", "Documentation Generator"])
     
@@ -64,7 +88,7 @@ with st.sidebar:
             "title": "New Chat",
             "file": None,
             "messages": [],
-            "created_at": datetime.now().isoformat() # <-- Add timestamp
+            "created_at": datetime.now().isoformat()
         }
         st.session_state.app_data["current_chat_id"] = new_chat_id
         save_app_data(st.session_state.app_data)
@@ -72,17 +96,16 @@ with st.sidebar:
 
     st.divider()
 
-    # --- SMART CHAT HISTORY (Gemini Style) ---
+    # --- SMART CHAT HISTORY ---
     st.title("Chat History")
     
-    # 1. Convert chats to a list and handle missing timestamps (backward compatibility)
     all_chats = []
     for c_id, chat_data in st.session_state.app_data["chats"].items():
-        # Don't show empty "New Chat" placeholders
+        # Filter out empty new chats
         if chat_data["title"] == "New Chat" and not chat_data["messages"]:
             continue
             
-        # Get timestamp or default to now if missing (for old chats)
+        # Handle timestamp (fallback for old chats)
         ts_str = chat_data.get("created_at", datetime.now().isoformat())
         try:
             ts_dt = datetime.fromisoformat(ts_str)
@@ -95,12 +118,11 @@ with st.sidebar:
             "dt": ts_dt
         })
 
-    # 2. Sort by date (newest first)
+    # Sort newest first
     all_chats.sort(key=lambda x: x["dt"], reverse=True)
 
-    # 3. Group into Categories
+    # Group by date
     groups = {"Today": [], "Yesterday": [], "Previous 7 Days": [], "Older": []}
-    
     now = datetime.now()
     today = now.date()
     yesterday = today - timedelta(days=1)
@@ -117,16 +139,13 @@ with st.sidebar:
         else:
             groups["Older"].append(chat)
 
-    # 4. Display Groups
-    # Helper style for headers
+    # Render groups
     def draw_group(group_name, chats_list):
         if chats_list:
-            st.markdown(f"**{group_name}**") # Bold header like "Today"
+            st.markdown(f"**{group_name}**")
             for chat in chats_list:
-                # Highlight the active chat
                 is_active = chat["id"] == st.session_state.app_data["current_chat_id"]
                 button_type = "secondary" if not is_active else "primary"
-                
                 if st.button(chat["title"], key=chat["id"], use_container_width=True, type=button_type):
                     st.session_state.app_data["current_chat_id"] = chat["id"]
                     save_app_data(st.session_state.app_data)
@@ -137,10 +156,17 @@ with st.sidebar:
     draw_group("Previous 7 Days", groups["Previous 7 Days"])
     draw_group("Older", groups["Older"])
     
+    # --- DELETE HISTORY BUTTON ---
+    st.divider()
+    if st.button("🗑️ Delete All History", use_container_width=True):
+        st.session_state.app_data["chats"] = {}
+        st.session_state.app_data["current_chat_id"] = None
+        save_app_data(st.session_state.app_data)
+        st.rerun()
+
     st.divider() 
     st.title("File Context 📎")
     
-    # --- File Uploader Logic ---
     current_chat_id = st.session_state.app_data["current_chat_id"]
     current_chat = st.session_state.app_data["chats"].get(current_chat_id)
 
@@ -191,9 +217,10 @@ if app_mode == "Documentation Generator":
             with st.spinner("Analyzing code..."):
                 try:
                     with requests.post(
-                        "https://clarityai-tnq0.onrender.com/generate-docs",
+                        f"{API_BASE_URL}/generate-docs",
                         json={"code": content},
-                        stream=True
+                        stream=True,
+                        headers=REQUEST_HEADERS
                     ) as response:
                         if response.status_code == 200:
                             st.success("Documentation generated!")
@@ -205,7 +232,7 @@ if app_mode == "Documentation Generator":
                         else:
                             st.error(f"Error from backend: {response.text}")
                 except requests.exceptions.ConnectionError:
-                    st.error("Failed to connect to the backend.")
+                    st.error(f"Failed to connect to backend at {API_BASE_URL}. Is it running?")
                 except Exception as e:
                     st.error(f"An error occurred: {e}")
 
@@ -217,7 +244,7 @@ elif app_mode == "General Chatbot":
     current_chat_id = st.session_state.app_data["current_chat_id"]
     current_chat = st.session_state.app_data["chats"].get(current_chat_id)
 
-    # Fallback if no chat selected
+    # Fallback for empty state
     if not current_chat:
         new_chat_id = str(uuid.uuid4())
         st.session_state.app_data["chats"][new_chat_id] = {
@@ -243,14 +270,19 @@ elif app_mode == "General Chatbot":
                 files["file"] = (_file_info["name"], file_bytes, _file_info["type"])
             
             with requests.post(
-                "https://clarityai-tnq0.onrender.com/chat", 
-                data=data, files=files, stream=True
+                f"{API_BASE_URL}/chat", 
+                data=data, 
+                files=files, 
+                stream=True,
+                headers=REQUEST_HEADERS
             ) as response:
                 if response.status_code == 200:
                     for chunk in response.iter_content(chunk_size=None, decode_unicode=True):
                         yield chunk
                 else:
                     yield f"Error from backend: {response.text}"
+        except requests.exceptions.ConnectionError:
+             yield f"Failed to connect to backend at {API_BASE_URL}. Is it running?"
         except Exception as e:
             yield f"An error occurred: {e}"
 
@@ -258,11 +290,8 @@ elif app_mode == "General Chatbot":
         
         is_first_message = len(current_chat["messages"]) == 0
         
-        # --- IMPROVED TITLING LOGIC ---
         if is_first_message:
-            # Use the smart title function instead of raw slicing
             current_chat["title"] = generate_smart_title(prompt)
-            # Ensure created_at exists
             if "created_at" not in current_chat:
                 current_chat["created_at"] = datetime.now().isoformat()
         
@@ -280,6 +309,5 @@ elif app_mode == "General Chatbot":
         
         save_app_data(st.session_state.app_data)
         
-        # Rerun only on first message to update the sidebar title immediately
         if is_first_message:
             st.rerun()
